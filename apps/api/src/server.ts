@@ -7,13 +7,18 @@ import { InMemoryStateStore } from "./services/state-machine/in-memory-store.js"
 import { DrizzleStateStore } from "./services/state-machine/drizzle-store.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { purchaseRoutes } from "./routes/purchases.js";
+import { evidenceRoutes } from "./routes/evidence.js";
+import { EvidenceService } from "./services/evidence/service.js";
 
 export interface ServerOptions {
   store?: IStateStore;
   paypalClient?: PayPalClient;
+  evidenceService?: EvidenceService;
   signingPrivateKeyHex?: string;
+  signingPublicKeyHex?: string;
   publicBaseUrl?: string;
   dashboardUrl?: string;
+  demoMode?: boolean;
   isTest?: boolean;
 }
 
@@ -52,10 +57,19 @@ export function buildServer(options: ServerOptions = {}): FastifyInstance {
     process.env.SIGNING_PRIVATE_KEY ||
     "302e020100300506032b6570042204205c791a5a1ca8e687718fb638985b86aca07e7928a03a5a2932ad14ca539869bd";
 
+  const signingPublicKeyHex =
+    options.signingPublicKeyHex ||
+    process.env.SIGNING_PUBLIC_KEY ||
+    "302a300506032b65700321007e7cfbe960c6a8a4c9ea3255cfa03b7963b6c9174d42bdcadd96c0475b949871";
+
   const stateMachine = new PurchaseStateMachineService(store);
+  const evidenceService =
+    options.evidenceService ||
+    new EvidenceService(store, signingPrivateKeyHex, signingPublicKeyHex);
   const publicBaseUrl =
     options.publicBaseUrl || process.env.PUBLIC_BASE_URL || "http://localhost:4000";
   const dashboardUrl = options.dashboardUrl || process.env.DASHBOARD_URL || "http://localhost:3000";
+  const demoMode = options.demoMode ?? process.env.DEMO_MODE === "true";
 
   // Register API routes
   app.register(
@@ -79,6 +93,12 @@ export function buildServer(options: ServerOptions = {}): FastifyInstance {
         signingPrivateKeyHex,
         publicBaseUrl,
         dashboardUrl,
+      });
+
+      // Evidence routes
+      api.register(evidenceRoutes, {
+        evidenceService,
+        demoMode,
       });
 
       // Webhooks
